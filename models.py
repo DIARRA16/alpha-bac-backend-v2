@@ -40,25 +40,3 @@ def create_resource(title: str, description: str, subject: str, resource_type: s
 def delete_resource(resource_id: str):
     response = supabase.table('resources').delete().eq('id', resource_id).execute()
     return response.data
-def upload_file_to_supabase_storage(file, folder: str, filename: str):
-    """
-    Upload un fichier dans Supabase Storage
-    """
-    from supabase import create_client
-    from config import SUPABASE_URL, SUPABASE_KEY
-
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-    # Lire le contenu du fichier
-    file_content = file.read()
-
-    # Téléverser dans le bon dossier
-    response = supabase.storage.from_('alpha-bac-storage').upload(
-        f"{folder}/{filename}",
-        file_content,
-        file_options={"content-type": file.content_type}
-    )
-
-    if response:
-        return True
-    return False

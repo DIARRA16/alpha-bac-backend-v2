@@ -1,12 +1,15 @@
 from flask import Flask, request, jsonify, session
+from flask_cors import CORS
 from werkzeug.security import check_password_hash
 from config import SECRET_KEY
-from werkzeug.utils import secure_filename
 from models import get_user_by_email, create_user, update_user_status, get_resources_by_subject, create_resource, delete_resource
+from werkzeug.utils import secure_filename
 import os
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+CORS(app)
 
 # --- Authentification ---
 
@@ -25,7 +28,7 @@ def login():
 
         return jsonify({
             'success': True,
-            'token': 'fake-jwt-token',  # Vous pouvez utiliser JWT ici si vous le souhaitez
+            'token': 'fake-jwt-token',
             'role': user['role'],
             'status': user['status']
         })
@@ -62,6 +65,10 @@ def admin_get_users():
     if not session.get('user_id') or session.get('role') != 'admin':
         return jsonify({'success': False, 'message': 'Accès refusé'}), 403
 
+    from supabase import create_client
+    from config import SUPABASE_URL, SUPABASE_KEY
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
     response = supabase.table('users').select('*').execute()
     return jsonify(response.data)
 
@@ -85,6 +92,10 @@ def admin_deactivate_user(user_id):
 def admin_get_resources():
     if not session.get('user_id') or session.get('role') != 'admin':
         return jsonify({'success': False, 'message': 'Accès refusé'}), 403
+
+    from supabase import create_client
+    from config import SUPABASE_URL, SUPABASE_KEY
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     response = supabase.table('resources').select('*').execute()
     return jsonify(response.data)
@@ -111,51 +122,6 @@ def admin_delete_resource(resource_id):
 
     delete_resource(resource_id)
     return jsonify({'success': True, 'message': 'Ressource supprimée'})
-@app.route('/api/admin/upload', methods=['POST'])
-def admin_upload_file():
-    if not session.get('user_id') or session.get('role') != 'admin':
-        return jsonify({'success': False, 'message': 'Accès refusé'}), 403
-
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'message': 'Aucun fichier envoyé'}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'success': False, 'message': 'Fichier vide'}), 400
-
-    # Récupérer les métadonnées
-    resource_type = request.form.get('resource_type')  # 'enonce', 'correction', 'video', 'audio'
-    subject = request.form.get('subject')  # 'math', 'pc', 'svt'
-    title = request.form.get('title')
-    description = request.form.get('description', '')
-
-    # Déterminer le dossier dans Supabase Storage
-    folder_map = {
-        'enonce': 'enonces',
-        'correction': 'corrections',
-        'video': 'videos',
-        'audio': 'audios'
-    }
-
-    folder = folder_map.get(resource_type)
-    if not folder:
-        return jsonify({'success': False, 'message': 'Type de fichier invalide'}), 400
-
-    filename = secure_filename(file.filename)
-
-    # Upload dans Supabase Storage
-    from models import upload_file_to_supabase_storage
-    success = upload_file_to_supabase_storage(file, folder, filename)
-
-    if not success:
-        return jsonify({'success': False, 'message': 'Échec de l’upload'}), 500
-
-    # Sauvegarder les métadonnées dans la base
-    create_resource(title, description, subject, resource_type, filename)
-
-    return jsonify({'success': True, 'message': 'Fichier ajouté avec succès'})
-
-# --- Démarrage du serveur ---
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
